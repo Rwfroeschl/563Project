@@ -1,3 +1,9 @@
+"""
+This code was written by Robert Froeschl and Michael Mudd. 
+
+The project is a simple chat server that allows users to register, log in, and send messages to each other. 
+
+"""
 import socket
 import sqlite3
 import threading
@@ -11,6 +17,8 @@ SERVER_PORT = 12345
 
 # A list that will store the usernames of clients that are currently connected to the server.
 online_clients = []
+# A dictionary that will map usernames to their corresponding client sockets.
+client_sockets = {}
 
 # This function will be run in a new thread for each client that connects to the server.
 def handle_client(client_socket):
@@ -76,9 +84,28 @@ def handle_client(client_socket):
                     response = "Login successful."
                     username = message_parts[1]
                     online_clients.append(username)
+                    # Add the client's socket to the dictionary, mapping from the username.
+                    # This will be used later to send messages to the client.
+                    client_sockets[username] = client_socket 
                 else:
                     # If no row is returned, it means the username and password are incorrect.
                     response = "Invalid username or password."
+        elif command == "MESSAGE":
+            # The MESSAGE command is for sending a message to another user.
+            # It should be followed by a username and the message.
+            if len(message_parts) < 3:
+                response = "Usage: MESSAGE <username> <message>"
+            else:
+                # Extract the target username and the message from the command.
+                target_username, message = message_parts[1], " ".join(message_parts[2:])
+                # Check if the target user is online (i.e., in the client_sockets dictionary).
+                if target_username in client_sockets:
+                    # If the user is online, send them the message and inform the sender that the message has been sent.
+                    client_sockets[target_username].send(f"{username}: {message}".encode())
+                    response = "Message sent."
+                else:
+                    # If the user is not online, inform the sender.
+                    response = "The specified user is not online."
         elif command == "WHO":
              # The WHO command is for retrieving a list of online clients.
             response = ", ".join(online_clients)
@@ -87,6 +114,12 @@ def handle_client(client_socket):
             response = "Goodbye!"
             client_socket.send(response.encode())
             client_socket.close()
+            # Check if the username is in the list of online clients
+            if username in online_clients:  
+                # If the user is online, remove them from the list of online clients
+                online_clients.remove(username)
+                # Also remove their socket from the dictionary of client sockets
+                del client_sockets[username]
             break
         else:
             # If the command is not recognized, inform the client.
